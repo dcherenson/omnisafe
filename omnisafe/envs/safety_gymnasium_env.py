@@ -119,6 +119,14 @@ class SafetyGymnasiumEnv(CMDP):
         'SafetyWalker2dVelocity-v1',
         'SafetyAntVelocity-v1',
         'SafetyHumanoidVelocity-v1',
+        # Paper-faithful velocity envs: cost = actual speed (not binary).
+        # Registered in omnisafe/envs/paper_velocity_envs.py.
+        'SafetyHopperVelocityPaper-v1',
+        'SafetyHalfCheetahVelocityPaper-v1',
+        'SafetyWalker2dVelocityPaper-v1',
+        'SafetySwimmerVelocityPaper-v1',
+        'SafetyAntVelocityPaper-v1',
+        'SafetyHumanoidVelocityPaper-v1',
         'SafetyPointRun0-v0',
         'SafetyCarRun0-v0',
     ]
