@@ -1,0 +1,7 @@
+results/
+logs/
+__pycache__/
+*.pyc
+*.pt
+*.egg-info/
+.conda/
