@@ -1,0 +1,51 @@
+
+{
+    "algo_cfgs": {
+        "focops_eta": 0.02,
+        "focops_lam": 1.5,
+        "update_iters": 10,
+        "steps_per_epoch": 4800
+    },
+    "lagrange_cfgs": {
+        "lambda_lr": 0.035,
+        "cost_limit": 50.0
+    },
+    "train_cfgs": {
+        "torch_threads": 1,
+        "vector_env_nums": 1,
+        "total_steps": 600000
+    },
+    "logger_cfgs": {
+        "use_tensorboard": true,
+        "use_wandb": false,
+        "log_dir": "exp-scg/SCG-Quadrotor-Tracking-v0/FOCOPS/SCG-Quadrotor-Tracking-v0---a70461b2cebf10b91f2ec20f0a01ff96c104741ff26593ebec0bfc8f8f750eaf/"
+    },
+    "seed": 0,
+    "env_id": "SCG-Quadrotor-Tracking-v0",
+    "algo": "FOCOPS"
+}
+{
+    "algo_cfgs": {
+        "focops_eta": 0.02,
+        "focops_lam": 1.5,
+        "update_iters": 10,
+        "steps_per_epoch": 4800
+    },
+    "lagrange_cfgs": {
+        "lambda_lr": 0.035,
+        "cost_limit": 50.0
+    },
+    "train_cfgs": {
+        "torch_threads": 1,
+        "vector_env_nums": 1,
+        "total_steps": 600000
+    },
+    "logger_cfgs": {
+        "use_tensorboard": true,
+        "use_wandb": false,
+        "log_dir": "exp-scg/SCG-Quadrotor-Tracking-v0/FOCOPS/SCG-Quadrotor-Tracking-v0---a70461b2cebf10b91f2ec20f0a01ff96c104741ff26593ebec0bfc8f8f750eaf/"
+    },
+    "seed": 5,
+    "env_id": "SCG-Quadrotor-Tracking-v0",
+    "algo": "FOCOPS"
+}

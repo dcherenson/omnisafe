@@ -1,0 +1,53 @@
+
+{
+    "model_cfgs": {
+        "critic": {
+            "lr": 0.0003
+        }
+    },
+    "algo_cfgs": {
+        "cg_iters": 10,
+        "cg_damping": 0.01,
+        "cost_limit": 25.0,
+        "steps_per_epoch": 2000
+    },
+    "train_cfgs": {
+        "torch_threads": 1,
+        "vector_env_nums": 1,
+        "total_steps": 500000
+    },
+    "logger_cfgs": {
+        "use_tensorboard": true,
+        "use_wandb": false,
+        "log_dir": "exp-scg/SCG-CartPole-Stabilization-v0/CPO/SCG-CartPole-Stabilization-v0---9d02c278ac4df0e10353a6929918c13df95e623325d742ba0d3527e6acaac5b7/"
+    },
+    "seed": 0,
+    "env_id": "SCG-CartPole-Stabilization-v0",
+    "algo": "CPO"
+}
+{
+    "model_cfgs": {
+        "critic": {
+            "lr": 0.0003
+        }
+    },
+    "algo_cfgs": {
+        "cg_iters": 10,
+        "cg_damping": 0.01,
+        "cost_limit": 25.0,
+        "steps_per_epoch": 2000
+    },
+    "train_cfgs": {
+        "torch_threads": 1,
+        "vector_env_nums": 1,
+        "total_steps": 500000
+    },
+    "logger_cfgs": {
+        "use_tensorboard": true,
+        "use_wandb": false,
+        "log_dir": "exp-scg/SCG-CartPole-Stabilization-v0/CPO/SCG-CartPole-Stabilization-v0---9d02c278ac4df0e10353a6929918c13df95e623325d742ba0d3527e6acaac5b7/"
+    },
+    "seed": 5,
+    "env_id": "SCG-CartPole-Stabilization-v0",
+    "algo": "CPO"
+}

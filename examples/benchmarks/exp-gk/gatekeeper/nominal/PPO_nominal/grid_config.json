@@ -1,0 +1,42 @@
+{
+    "algo": [
+        "PPO"
+    ],
+    "env_id": [
+        "SCG-Quadrotor-Gatekeeper-v0"
+    ],
+    "seed": [
+        0,
+        5
+    ],
+    "logger_cfgs:use_wandb": [
+        false
+    ],
+    "logger_cfgs:use_tensorboard": [
+        true
+    ],
+    "algo_cfgs:steps_per_epoch": [
+        192
+    ],
+    "train_cfgs:total_steps": [
+        9600
+    ],
+    "train_cfgs:vector_env_nums": [
+        1
+    ],
+    "train_cfgs:torch_threads": [
+        1
+    ],
+    "train_cfgs:device": [
+        "cpu"
+    ],
+    "algo_cfgs:update_iters": [
+        10
+    ],
+    "model_cfgs:actor:lr": [
+        0.0003
+    ],
+    "model_cfgs:critic:lr": [
+        0.0003
+    ]
+}

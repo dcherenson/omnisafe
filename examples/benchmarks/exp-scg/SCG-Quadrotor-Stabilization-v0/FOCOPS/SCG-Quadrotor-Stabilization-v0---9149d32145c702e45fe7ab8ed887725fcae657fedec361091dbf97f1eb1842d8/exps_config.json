@@ -1,0 +1,51 @@
+
+{
+    "algo_cfgs": {
+        "focops_eta": 0.02,
+        "focops_lam": 1.5,
+        "update_iters": 10,
+        "steps_per_epoch": 3000
+    },
+    "lagrange_cfgs": {
+        "lambda_lr": 0.035,
+        "cost_limit": 25.0
+    },
+    "train_cfgs": {
+        "torch_threads": 1,
+        "vector_env_nums": 1,
+        "total_steps": 500000
+    },
+    "logger_cfgs": {
+        "use_tensorboard": true,
+        "use_wandb": false,
+        "log_dir": "exp-scg/SCG-Quadrotor-Stabilization-v0/FOCOPS/SCG-Quadrotor-Stabilization-v0---9149d32145c702e45fe7ab8ed887725fcae657fedec361091dbf97f1eb1842d8/"
+    },
+    "seed": 0,
+    "env_id": "SCG-Quadrotor-Stabilization-v0",
+    "algo": "FOCOPS"
+}
+{
+    "algo_cfgs": {
+        "focops_eta": 0.02,
+        "focops_lam": 1.5,
+        "update_iters": 10,
+        "steps_per_epoch": 3000
+    },
+    "lagrange_cfgs": {
+        "lambda_lr": 0.035,
+        "cost_limit": 25.0
+    },
+    "train_cfgs": {
+        "torch_threads": 1,
+        "vector_env_nums": 1,
+        "total_steps": 500000
+    },
+    "logger_cfgs": {
+        "use_tensorboard": true,
+        "use_wandb": false,
+        "log_dir": "exp-scg/SCG-Quadrotor-Stabilization-v0/FOCOPS/SCG-Quadrotor-Stabilization-v0---9149d32145c702e45fe7ab8ed887725fcae657fedec361091dbf97f1eb1842d8/"
+    },
+    "seed": 5,
+    "env_id": "SCG-Quadrotor-Stabilization-v0",
+    "algo": "FOCOPS"
+}

@@ -1,0 +1,57 @@
+
+{
+    "model_cfgs": {
+        "critic": {
+            "lr": 0.0003
+        },
+        "actor": {
+            "lr": 0.0003
+        }
+    },
+    "algo_cfgs": {
+        "update_iters": 10,
+        "steps_per_epoch": 960
+    },
+    "train_cfgs": {
+        "device": "cpu",
+        "torch_threads": 1,
+        "vector_env_nums": 1,
+        "total_steps": 60000
+    },
+    "logger_cfgs": {
+        "use_tensorboard": true,
+        "use_wandb": false,
+        "log_dir": "/home/kbn/rl_ece567/omnisafe/examples/benchmarks/exp-backup/PPO_backup/SCG-Quadrotor-Backup-v0---0e73535ae1a9b9298cedb2ce33b2e0d6d57007b95444f42529a1a982be801517/"
+    },
+    "seed": 0,
+    "env_id": "SCG-Quadrotor-Backup-v0",
+    "algo": "PPO"
+}
+{
+    "model_cfgs": {
+        "critic": {
+            "lr": 0.0003
+        },
+        "actor": {
+            "lr": 0.0003
+        }
+    },
+    "algo_cfgs": {
+        "update_iters": 10,
+        "steps_per_epoch": 960
+    },
+    "train_cfgs": {
+        "device": "cpu",
+        "torch_threads": 1,
+        "vector_env_nums": 1,
+        "total_steps": 60000
+    },
+    "logger_cfgs": {
+        "use_tensorboard": true,
+        "use_wandb": false,
+        "log_dir": "/home/kbn/rl_ece567/omnisafe/examples/benchmarks/exp-backup/PPO_backup/SCG-Quadrotor-Backup-v0---0e73535ae1a9b9298cedb2ce33b2e0d6d57007b95444f42529a1a982be801517/"
+    },
+    "seed": 5,
+    "env_id": "SCG-Quadrotor-Backup-v0",
+    "algo": "PPO"
+}

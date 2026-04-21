@@ -1,0 +1,99 @@
+{
+    "seed": 0,
+    "train_cfgs": {
+        "device": "cpu",
+        "torch_threads": 1,
+        "vector_env_nums": 1,
+        "parallel": 1,
+        "total_steps": 60000,
+        "epochs": 62
+    },
+    "algo_cfgs": {
+        "steps_per_epoch": 960,
+        "update_iters": 10,
+        "batch_size": 64,
+        "target_kl": 0.02,
+        "entropy_coef": 0.0,
+        "reward_normalize": false,
+        "cost_normalize": false,
+        "obs_normalize": true,
+        "kl_early_stop": true,
+        "use_max_grad_norm": true,
+        "max_grad_norm": 40.0,
+        "use_critic_norm": true,
+        "critic_norm_coef": 0.001,
+        "gamma": 0.99,
+        "cost_gamma": 0.99,
+        "lam": 0.95,
+        "lam_c": 0.95,
+        "clip": 0.2,
+        "adv_estimation_method": "gae",
+        "standardized_rew_adv": true,
+        "standardized_cost_adv": true,
+        "penalty_coef": 0.0,
+        "use_cost": false
+    },
+    "logger_cfgs": {
+        "use_wandb": false,
+        "wandb_project": "omnisafe",
+        "use_tensorboard": true,
+        "save_model_freq": 100,
+        "log_dir": "/home/kbn/rl_ece567/omnisafe/examples/benchmarks/exp-backup/PPO_backup/SCG-Quadrotor-Backup-v0---0e73535ae1a9b9298cedb2ce33b2e0d6d57007b95444f42529a1a982be801517/",
+        "window_lens": 100
+    },
+    "model_cfgs": {
+        "weight_initialization_mode": "kaiming_uniform",
+        "actor_type": "gaussian_learning",
+        "linear_lr_decay": true,
+        "exploration_noise_anneal": false,
+        "std_range": [
+            0.5,
+            0.1
+        ],
+        "actor": {
+            "hidden_sizes": [
+                64,
+                64
+            ],
+            "activation": "tanh",
+            "lr": 0.0003
+        },
+        "critic": {
+            "hidden_sizes": [
+                64,
+                64
+            ],
+            "activation": "tanh",
+            "lr": 0.0003
+        }
+    },
+    "exp_increment_cfgs": {
+        "model_cfgs": {
+            "critic": {
+                "lr": 0.0003
+            },
+            "actor": {
+                "lr": 0.0003
+            }
+        },
+        "algo_cfgs": {
+            "update_iters": 10,
+            "steps_per_epoch": 960
+        },
+        "train_cfgs": {
+            "device": "cpu",
+            "torch_threads": 1,
+            "vector_env_nums": 1,
+            "total_steps": 60000
+        },
+        "logger_cfgs": {
+            "use_tensorboard": true,
+            "use_wandb": false,
+            "log_dir": "/home/kbn/rl_ece567/omnisafe/examples/benchmarks/exp-backup/PPO_backup/SCG-Quadrotor-Backup-v0---0e73535ae1a9b9298cedb2ce33b2e0d6d57007b95444f42529a1a982be801517/"
+        },
+        "seed": 0
+    },
+    "exp_name": "PPO-{SCG-Quadrotor-Backup-v0}",
+    "env_id": "SCG-Quadrotor-Backup-v0",
+    "algo": "PPO"
+}

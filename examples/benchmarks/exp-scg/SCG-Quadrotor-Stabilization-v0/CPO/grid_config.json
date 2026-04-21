@@ -1,0 +1,42 @@
+{
+    "algo": [
+        "CPO"
+    ],
+    "env_id": [
+        "SCG-Quadrotor-Stabilization-v0"
+    ],
+    "seed": [
+        0,
+        5
+    ],
+    "logger_cfgs:use_wandb": [
+        false
+    ],
+    "logger_cfgs:use_tensorboard": [
+        true
+    ],
+    "algo_cfgs:steps_per_epoch": [
+        3000
+    ],
+    "train_cfgs:total_steps": [
+        500000
+    ],
+    "train_cfgs:vector_env_nums": [
+        1
+    ],
+    "train_cfgs:torch_threads": [
+        1
+    ],
+    "algo_cfgs:cost_limit": [
+        25.0
+    ],
+    "algo_cfgs:cg_damping": [
+        0.01
+    ],
+    "algo_cfgs:cg_iters": [
+        10
+    ],
+    "model_cfgs:critic:lr": [
+        0.0003
+    ]
+}

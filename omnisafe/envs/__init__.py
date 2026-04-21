@@ -24,3 +24,26 @@ from omnisafe.envs.safety_gymnasium_env import SafetyGymnasiumEnv
 from omnisafe.envs.safety_gymnasium_modelbased import SafetyGymnasiumModelBased
 from omnisafe.envs.safety_isaac_gym_env import SafetyIsaacGymEnv
 import omnisafe.envs.paper_velocity_envs  # registers Paper-faithful envs with gymnasium
+
+# Safe-control-gym environments (CartPole, Quadrotor stabilization/tracking)
+# used by the earlier CPO/FOCOPS benchmark work.
+try:
+    from omnisafe.envs.safe_control_gym_env import SafeControlGymEnv  # noqa: F401
+except ImportError:
+    pass
+
+# Gatekeeper-RL project, Stage-1 env: train a stabilizing backup policy from
+# rich random initial states (see examples/benchmarks/train_backup.py).
+try:
+    from omnisafe.envs.scg_backup_env import SCGQuadrotorBackupEnv  # noqa: F401
+except ImportError:
+    pass
+
+# Gatekeeper-RL project, Stage-2 env: RL switching policy that picks, per
+# decision step, between the nominal circle-tracking reference and the frozen
+# Stage-1 backup policy, with a forward-sim safety filter and shaping reward.
+# Low-level tracking = safe-control-gym's classical DSL PID (not trained).
+try:
+    from omnisafe.envs.scg_gatekeeper_env import SCGQuadrotorGatekeeperEnv  # noqa: F401
+except ImportError:
+    pass
