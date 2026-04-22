@@ -6,7 +6,7 @@
   "paper_cost_limit": 151.989,
   "nominal_run_dir": "/home/dasc-lab/Github/omnisafe/examples/benchmarks/exp-final-velocity/halfcheetah/nominal/PPO-{SafetyHalfCheetahVelocity-v1}/seed-000-2026-04-21-19-20-17",
   "recovery_run_dir": "/home/dasc-lab/Github/omnisafe/examples/benchmarks/exp-final-velocity/halfcheetah/recovery/PPO-{VelocityRecoveryHalfCheetah-v0}/seed-000-2026-04-21-19-34-34",
-  "switch_run_dir": "/home/dasc-lab/Github/omnisafe/examples/benchmarks/exp-final-velocity/halfcheetah/switch/PPO-{VelocitySwitchHalfCheetah-v0}/seed-000-2026-04-21-19-42-45",
+  "switch_run_dir": "/home/dasc-lab/Github/omnisafe/examples/benchmarks/exp-final-velocity/halfcheetah/switch/PPO-{VelocitySwitchHalfCheetah-v0}/seed-000-2026-04-22-15-04-18",
   "eval_episodes": 5,
   "nominal_total_steps": 1000000,
   "recovery_total_steps": 500000,
