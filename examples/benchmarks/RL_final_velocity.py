@@ -56,6 +56,7 @@ DEFAULT_STAGES = ['nominal', 'recovery', 'switch']
 DEFAULT_SEEDS = [0]
 DEFAULT_EVAL_EPISODES = 5
 DEFAULT_TRACE_EPISODES = 2
+DEFAULT_BASE_TASK_EVAL_EPISODES = 5
 
 DEFAULT_TOTAL_STEPS = {
     'nominal': 1_000_000,
@@ -92,6 +93,8 @@ class VelocityRobotSpec:
     key: str
     title: str
     nominal_env_id: str
+    paper_eval_env_id: str
+    paper_cost_limit: float
     recovery_env_id: str
     switch_env_id: str
     stop_speed: float
@@ -106,6 +109,8 @@ ROBOT_SPECS: dict[str, VelocityRobotSpec] = {
         key='ant',
         title='Ant',
         nominal_env_id='SafetyAntVelocity-v1',
+        paper_eval_env_id='SafetyAntVelocityPaper-v1',
+        paper_cost_limit=103.115,
         recovery_env_id='VelocityRecoveryAnt-v0',
         switch_env_id='VelocitySwitchAnt-v0',
         stop_speed=0.60,
@@ -118,6 +123,8 @@ ROBOT_SPECS: dict[str, VelocityRobotSpec] = {
         key='halfcheetah',
         title='HalfCheetah',
         nominal_env_id='SafetyHalfCheetahVelocity-v1',
+        paper_eval_env_id='SafetyHalfCheetahVelocityPaper-v1',
+        paper_cost_limit=151.989,
         recovery_env_id='VelocityRecoveryHalfCheetah-v0',
         switch_env_id='VelocitySwitchHalfCheetah-v0',
         stop_speed=0.50,
@@ -130,6 +137,8 @@ ROBOT_SPECS: dict[str, VelocityRobotSpec] = {
         key='humanoid',
         title='Humanoid',
         nominal_env_id='SafetyHumanoidVelocity-v1',
+        paper_eval_env_id='SafetyHumanoidVelocityPaper-v1',
+        paper_cost_limit=20.140,
         recovery_env_id='VelocityRecoveryHumanoid-v0',
         switch_env_id='VelocitySwitchHumanoid-v0',
         stop_speed=0.35,
@@ -176,6 +185,8 @@ def _to_tensor(value: Any, device: torch.device, dtype: torch.dtype = torch.floa
 
 def _make_base_velocity_env(env_id: str):
     import safety_gymnasium
+    if 'VelocityPaper-v1' in env_id:
+        import omnisafe.envs.paper_velocity_envs  # noqa: F401
 
     env = safety_gymnasium.make(id=env_id, autoreset=False)
     assert isinstance(env.action_space, spaces.Box), 'This scenario only supports Box actions.'
@@ -289,12 +300,16 @@ class SavedOmniSafeActor:
         action_space: spaces.Box,
         label: str,
         required: bool,
+        checkpoint_path: str | os.PathLike[str] | None = None,
     ) -> None:
         self._run_dir = Path(run_dir).expanduser().resolve() if run_dir is not None else None
         self._obs_space = obs_space
         self._action_space = action_space
         self._label = label
         self._required = required
+        self._checkpoint_path_override = (
+            Path(checkpoint_path).expanduser().resolve() if checkpoint_path is not None else None
+        )
 
         self._actor = None
         self._obs_normalizer: Normalizer | None = None
@@ -304,16 +319,27 @@ class SavedOmniSafeActor:
         self._load()
 
     def _load(self) -> None:
-        if self._run_dir is None:
-            if self._required:
-                raise FileNotFoundError(f'No run_dir provided for required {self._label} actor.')
-            return
-        if not self._run_dir.exists():
+        if self._checkpoint_path_override is not None:
+            checkpoint_path = self._checkpoint_path_override
+            if self._run_dir is None:
+                self._run_dir = checkpoint_path.parent.parent
+        else:
+            if self._run_dir is None:
+                if self._required:
+                    raise FileNotFoundError(f'No run_dir provided for required {self._label} actor.')
+                return
+            if not self._run_dir.exists():
+                if self._required:
+                    raise FileNotFoundError(f'{self._label} run_dir not found: {self._run_dir}')
+                return
+            checkpoint_path = _latest_checkpoint(self._run_dir)
+
+        if self._run_dir is None or not self._run_dir.exists():
             if self._required:
                 raise FileNotFoundError(f'{self._label} run_dir not found: {self._run_dir}')
             return
-
-        checkpoint_path = _latest_checkpoint(self._run_dir)
+        if not checkpoint_path.exists():
+            raise FileNotFoundError(f'{self._label} checkpoint not found: {checkpoint_path}')
         config_path = self._run_dir / 'config.json'
         if not config_path.exists():
             raise FileNotFoundError(f'Missing config.json in {self._run_dir}')
@@ -397,7 +423,9 @@ class VelocityRecoveryEnv(CMDP):
         super().__init__(env_id)
         self._device = torch.device(device)
         self._spec = _resolve_robot_spec(env_id)
-        self._base_env = _make_base_velocity_env(self._spec.nominal_env_id)
+        # Train the switcher on the paper-style continuous-cost task so its
+        # reward shaping and logged episode cost align with the paper limit.
+        self._base_env = _make_base_velocity_env(self._spec.paper_eval_env_id)
         # Match the baseline safe-velocity information pattern as closely as
         # possible: the recovery actor only sees the base environment
         # observation at decision time.
@@ -625,7 +653,7 @@ class VelocitySwitchEnv(CMDP):
 
         self._metadata = {
             'robot': self._spec.title,
-            'base_env_id': self._spec.nominal_env_id,
+            'base_env_id': self._spec.paper_eval_env_id,
             'nominal_run_dir': str(nominal_run_dir),
             'recovery_run_dir': str(recovery_run_dir),
         }
@@ -832,6 +860,71 @@ def _write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
         writer.writerows(rows)
 
 
+def _read_json(path: Path) -> dict[str, Any]:
+    with open(path, encoding='utf-8') as handle:
+        return json.load(handle)
+
+
+def _read_progress_csv(path: Path) -> list[dict[str, float]]:
+    if not path.exists():
+        raise FileNotFoundError(f'Missing progress.csv: {path}')
+
+    rows: list[dict[str, float]] = []
+    with open(path, newline='', encoding='utf-8') as handle:
+        reader = csv.DictReader(handle)
+        for row in reader:
+            parsed: dict[str, float] = {}
+            for key, value in row.items():
+                if value is None or value == '':
+                    continue
+                try:
+                    parsed[key] = float(value)
+                except ValueError:
+                    continue
+            if parsed:
+                rows.append(parsed)
+    return rows
+
+
+def _checkpoint_sort_key(path: Path) -> int:
+    return int(path.stem.split('-')[1])
+
+
+def _list_checkpoints(run_dir: Path) -> list[Path]:
+    checkpoints = sorted(
+        run_dir.joinpath('torch_save').glob('epoch-*.pt'),
+        key=_checkpoint_sort_key,
+    )
+    if not checkpoints:
+        raise FileNotFoundError(f'No epoch-*.pt checkpoints found under {run_dir / "torch_save"}')
+    return checkpoints
+
+
+def _extract_training_curve_rows(run_dir: Path) -> list[dict[str, float]]:
+    progress_rows = _read_progress_csv(run_dir / 'progress.csv')
+    return [
+        {
+            'total_env_steps': float(row['TotalEnvSteps']),
+            'episode_reward': float(row['Metrics/EpRet']),
+            'episode_cost': float(row['Metrics/EpCost']),
+            'episode_length': float(row.get('Metrics/EpLen', 0.0)),
+        }
+        for row in progress_rows
+        if 'TotalEnvSteps' in row and 'Metrics/EpRet' in row and 'Metrics/EpCost' in row
+    ]
+
+
+def _checkpoint_total_steps(
+    checkpoint_path: Path,
+    progress_rows: list[dict[str, float]],
+    total_steps: int,
+) -> float:
+    checkpoint_epoch = _checkpoint_sort_key(checkpoint_path)
+    if checkpoint_epoch < len(progress_rows) and 'TotalEnvSteps' in progress_rows[checkpoint_epoch]:
+        return float(progress_rows[checkpoint_epoch]['TotalEnvSteps'])
+    return float(total_steps)
+
+
 def _maybe_import_pyplot():
     try:
         import matplotlib.pyplot as plt
@@ -878,6 +971,227 @@ def _save_trace_plot(trace_rows: list[dict[str, Any]], path: Path, title: str) -
     fig.tight_layout()
     path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(path, dpi=150)
+    plt.close(fig)
+    return True
+
+
+def _rollout_base_policy(
+    env_id: str,
+    label: str,
+    episode: int,
+    seed: int,
+    action_fn,
+) -> dict[str, float]:
+    base_env = _make_base_velocity_env(env_id)
+    base_obs, _info = base_env.reset(seed=seed)
+    obs = np.asarray(base_obs, dtype=np.float32)
+
+    ep_reward = 0.0
+    ep_cost = 0.0
+    steps = 0
+    nominal_steps = 0
+    terminated = False
+    truncated = False
+    speeds: list[float] = []
+    unhealthy_steps = 0
+    violation_steps = 0
+
+    while not (terminated or truncated):
+        env_action, gate = action_fn(obs)
+        next_obs, reward, cost, terminated, truncated, info = base_env.step(env_action)
+        obs = np.asarray(next_obs, dtype=np.float32)
+        speed = _extract_speed(info)
+        healthy = _extract_health_flag(base_env, bool(terminated), info)
+
+        ep_reward += float(reward)
+        ep_cost += float(cost)
+        steps += 1
+        nominal_steps += int(gate)
+        speeds.append(speed)
+        unhealthy_steps += int(not healthy)
+        violation_steps += int(float(cost) > 0.0)
+
+    base_env.close()
+
+    return {
+        'label': label,
+        'episode': float(episode),
+        'seed': float(seed),
+        'base_episode_reward': ep_reward,
+        'base_episode_cost': ep_cost,
+        'base_episode_length': float(steps),
+        'nominal_fraction': float(nominal_steps / steps) if steps > 0 else 0.0,
+        'mean_speed': float(np.mean(speeds)) if speeds else 0.0,
+        'max_speed': float(np.max(speeds)) if speeds else 0.0,
+        'violation_steps': float(violation_steps),
+        'unhealthy_steps': float(unhealthy_steps),
+        'terminated': float(int(bool(terminated))),
+        'truncated': float(int(bool(truncated))),
+    }
+
+
+def _rollout_base_composite_policy(
+    env_id: str,
+    nominal_actor: SavedOmniSafeActor,
+    recovery_actor: SavedOmniSafeActor,
+    switch_actor: SavedOmniSafeActor,
+    episode: int,
+    seed: int,
+) -> dict[str, float]:
+    def _composite_action(obs: np.ndarray) -> tuple[np.ndarray, int]:
+        gate_action = switch_actor.action(obs)
+        gate_value = float(np.clip(np.asarray(gate_action, dtype=np.float32).reshape(-1)[0], 0.0, 1.0))
+        gate = int(gate_value > 0.5)
+        env_action = nominal_actor.action(obs) if gate == 1 else recovery_actor.action(obs)
+        return env_action, gate
+
+    return _rollout_base_policy(
+        env_id=env_id,
+        label='composite',
+        episode=episode,
+        seed=seed,
+        action_fn=_composite_action,
+    )
+
+
+def _rollout_nominal_base_policy(
+    env_id: str,
+    nominal_actor: SavedOmniSafeActor,
+    episode: int,
+    seed: int,
+) -> dict[str, float]:
+    return _rollout_base_policy(
+        env_id=env_id,
+        label='nominal',
+        episode=episode,
+        seed=seed,
+        action_fn=lambda obs: (nominal_actor.action(obs), 1),
+    )
+
+
+def _save_benchmark_curve_plot(
+    nominal_eval_rows: list[dict[str, float]],
+    composite_rows: list[dict[str, float]],
+    path: Path,
+    title: str,
+    stage_boundaries: tuple[float, float],
+    cost_limit: float | None = None,
+) -> bool:
+    if not nominal_eval_rows and not composite_rows:
+        return False
+
+    plt = _maybe_import_pyplot()
+    if plt is None:
+        return False
+
+    from matplotlib.ticker import FuncFormatter
+
+    fig, axes = plt.subplots(1, 2, figsize=(12, 4.2), sharex=True)
+    fig.suptitle(title)
+
+    nominal_x = [row['cumulative_env_steps'] for row in nominal_eval_rows]
+    nominal_reward = [row['avg_base_episode_reward'] for row in nominal_eval_rows]
+    nominal_reward_std = [row['std_base_episode_reward'] for row in nominal_eval_rows]
+    nominal_cost = [row['avg_base_episode_cost'] for row in nominal_eval_rows]
+    nominal_cost_std = [row['std_base_episode_cost'] for row in nominal_eval_rows]
+
+    composite_x = [row['cumulative_env_steps'] for row in composite_rows]
+    composite_reward = [row['avg_base_episode_reward'] for row in composite_rows]
+    composite_reward_std = [row['std_base_episode_reward'] for row in composite_rows]
+    composite_cost = [row['avg_base_episode_cost'] for row in composite_rows]
+    composite_cost_std = [row['std_base_episode_cost'] for row in composite_rows]
+
+    if nominal_eval_rows:
+        axes[0].plot(
+            nominal_x,
+            nominal_reward,
+            color='tab:blue',
+            linewidth=1.8,
+            label='Nominal PPO Eval',
+        )
+        axes[0].fill_between(
+            nominal_x,
+            np.asarray(nominal_reward) - np.asarray(nominal_reward_std),
+            np.asarray(nominal_reward) + np.asarray(nominal_reward_std),
+            color='tab:blue',
+            alpha=0.15,
+        )
+        axes[1].plot(
+            nominal_x,
+            nominal_cost,
+            color='tab:blue',
+            linewidth=1.8,
+            label='Nominal PPO Eval',
+        )
+        axes[1].fill_between(
+            nominal_x,
+            np.asarray(nominal_cost) - np.asarray(nominal_cost_std),
+            np.asarray(nominal_cost) + np.asarray(nominal_cost_std),
+            color='tab:blue',
+            alpha=0.15,
+        )
+
+    if composite_rows:
+        axes[0].plot(
+            composite_x,
+            composite_reward,
+            color='tab:orange',
+            linewidth=2.0,
+            marker='o',
+            label='Composite Base Eval',
+        )
+        axes[0].fill_between(
+            composite_x,
+            np.asarray(composite_reward) - np.asarray(composite_reward_std),
+            np.asarray(composite_reward) + np.asarray(composite_reward_std),
+            color='tab:orange',
+            alpha=0.15,
+        )
+        axes[1].plot(
+            composite_x,
+            composite_cost,
+            color='tab:orange',
+            linewidth=2.0,
+            marker='o',
+            label='Composite Base Eval',
+        )
+        axes[1].fill_between(
+            composite_x,
+            np.asarray(composite_cost) - np.asarray(composite_cost_std),
+            np.asarray(composite_cost) + np.asarray(composite_cost_std),
+            color='tab:orange',
+            alpha=0.15,
+        )
+
+    for boundary in stage_boundaries:
+        for ax in axes:
+            ax.axvline(boundary, color='0.5', linestyle='--', linewidth=1.0, alpha=0.8)
+
+    axes[0].set_title('Episode Reward')
+    axes[0].set_ylabel('Return')
+    axes[0].grid(alpha=0.3)
+    axes[0].legend()
+
+    axes[1].set_title('Episode Cost')
+    axes[1].set_ylabel('Cost')
+    axes[1].grid(alpha=0.3)
+    if cost_limit is not None:
+        axes[1].axhline(
+            y=cost_limit,
+            color='black',
+            linestyle='--',
+            linewidth=1.2,
+            label=f'Paper Limit ({cost_limit:.3f})',
+        )
+    axes[1].legend()
+
+    for ax in axes:
+        ax.set_xlabel('Cumulative Environment Steps')
+        ax.xaxis.set_major_formatter(FuncFormatter(lambda x, _pos: f'{x/1e6:.1f}M'))
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fig.tight_layout()
+    fig.savefig(path, dpi=150, bbox_inches='tight')
     plt.close(fig)
     return True
 
@@ -1064,6 +1378,271 @@ def _evaluate_switch_seed(
         )
 
 
+def _evaluate_base_task_benchmark_curves_seed(
+    output_dir: Path,
+    robot: str,
+    seed: int,
+    eval_episodes: int,
+) -> None:
+    spec = ROBOT_SPECS[robot]
+    nominal_run = _require_stage_run(output_dir, robot, 'nominal', seed)
+    recovery_run = _require_stage_run(output_dir, robot, 'recovery', seed)
+    switch_run = _require_stage_run(output_dir, robot, 'switch', seed)
+
+    nominal_cfg = _read_json(nominal_run / 'config.json')
+    recovery_cfg = _read_json(recovery_run / 'config.json')
+    switch_cfg = _read_json(switch_run / 'config.json')
+
+    nominal_total_steps = int(nominal_cfg['train_cfgs']['total_steps'])
+    recovery_total_steps = int(recovery_cfg['train_cfgs']['total_steps'])
+    switch_total_steps = int(switch_cfg['train_cfgs']['total_steps'])
+
+    nominal_curve_rows = _extract_training_curve_rows(nominal_run)
+    nominal_progress_rows = _read_progress_csv(nominal_run / 'progress.csv')
+    nominal_checkpoints = _list_checkpoints(nominal_run)
+    switch_progress_rows = _read_progress_csv(switch_run / 'progress.csv')
+    switch_checkpoints = _list_checkpoints(switch_run)
+    reference_env = _make_base_velocity_env(spec.nominal_env_id)
+    base_obs_space = reference_env.observation_space
+    base_action_space = reference_env.action_space
+    reference_env.close()
+    paper_eval_env_id = spec.paper_eval_env_id
+
+    recovery_actor = SavedOmniSafeActor(
+        run_dir=recovery_run,
+        obs_space=base_obs_space,
+        action_space=base_action_space,
+        label=f'{spec.title} recovery',
+        required=True,
+    )
+
+    nominal_eval_rows: list[dict[str, float]] = []
+    for checkpoint_path in nominal_checkpoints:
+        nominal_actor = SavedOmniSafeActor(
+            run_dir=nominal_run,
+            obs_space=base_obs_space,
+            action_space=base_action_space,
+            label=f'{spec.title} nominal',
+            required=True,
+            checkpoint_path=checkpoint_path,
+        )
+
+        episode_rows: list[dict[str, float]] = []
+        for episode in range(eval_episodes):
+            episode_seed = 15_000 + seed * 100 + episode
+            episode_rows.append(
+                _rollout_nominal_base_policy(
+                    env_id=paper_eval_env_id,
+                    nominal_actor=nominal_actor,
+                    episode=episode,
+                    seed=episode_seed,
+                ),
+            )
+
+        nominal_steps = _checkpoint_total_steps(
+            checkpoint_path=checkpoint_path,
+            progress_rows=nominal_progress_rows,
+            total_steps=nominal_total_steps,
+        )
+        nominal_eval_rows.append(
+            {
+                'checkpoint': float(_checkpoint_sort_key(checkpoint_path)),
+                'stage_env_steps': nominal_steps,
+                'cumulative_env_steps': nominal_steps,
+                'avg_base_episode_reward': float(
+                    np.mean([row['base_episode_reward'] for row in episode_rows]),
+                ),
+                'std_base_episode_reward': float(
+                    np.std([row['base_episode_reward'] for row in episode_rows]),
+                ),
+                'avg_base_episode_cost': float(
+                    np.mean([row['base_episode_cost'] for row in episode_rows]),
+                ),
+                'std_base_episode_cost': float(
+                    np.std([row['base_episode_cost'] for row in episode_rows]),
+                ),
+                'avg_base_episode_length': float(
+                    np.mean([row['base_episode_length'] for row in episode_rows]),
+                ),
+                'avg_nominal_fraction': 1.0,
+                'avg_mean_speed': float(np.mean([row['mean_speed'] for row in episode_rows])),
+                'avg_max_speed': float(np.mean([row['max_speed'] for row in episode_rows])),
+                'avg_violation_steps': float(
+                    np.mean([row['violation_steps'] for row in episode_rows]),
+                ),
+                'avg_unhealthy_steps': float(
+                    np.mean([row['unhealthy_steps'] for row in episode_rows]),
+                ),
+                'eval_episodes': float(eval_episodes),
+            },
+        )
+
+    nominal_actor = SavedOmniSafeActor(
+        run_dir=nominal_run,
+        obs_space=base_obs_space,
+        action_space=base_action_space,
+        label=f'{spec.title} nominal',
+        required=True,
+    )
+    composite_curve_rows: list[dict[str, float]] = []
+    for checkpoint_path in switch_checkpoints:
+        switch_actor = SavedOmniSafeActor(
+            run_dir=switch_run,
+            obs_space=base_obs_space,
+            action_space=_gate_action_space(),
+            label=f'{spec.title} switch',
+            required=True,
+            checkpoint_path=checkpoint_path,
+        )
+
+        episode_rows: list[dict[str, float]] = []
+        for episode in range(eval_episodes):
+            episode_seed = 20_000 + seed * 100 + episode
+            episode_rows.append(
+                _rollout_base_composite_policy(
+                    env_id=paper_eval_env_id,
+                    nominal_actor=nominal_actor,
+                    recovery_actor=recovery_actor,
+                    switch_actor=switch_actor,
+                    episode=episode,
+                    seed=episode_seed,
+                ),
+            )
+
+        switch_steps = _checkpoint_total_steps(
+            checkpoint_path=checkpoint_path,
+            progress_rows=switch_progress_rows,
+            total_steps=switch_total_steps,
+        )
+        composite_curve_rows.append(
+            {
+                'checkpoint': float(_checkpoint_sort_key(checkpoint_path)),
+                'switch_stage_env_steps': switch_steps,
+                'cumulative_env_steps': float(nominal_total_steps + recovery_total_steps) + switch_steps,
+                'avg_base_episode_reward': float(
+                    np.mean([row['base_episode_reward'] for row in episode_rows]),
+                ),
+                'std_base_episode_reward': float(
+                    np.std([row['base_episode_reward'] for row in episode_rows]),
+                ),
+                'avg_base_episode_cost': float(
+                    np.mean([row['base_episode_cost'] for row in episode_rows]),
+                ),
+                'std_base_episode_cost': float(
+                    np.std([row['base_episode_cost'] for row in episode_rows]),
+                ),
+                'avg_base_episode_length': float(
+                    np.mean([row['base_episode_length'] for row in episode_rows]),
+                ),
+                'avg_nominal_fraction': float(
+                    np.mean([row['nominal_fraction'] for row in episode_rows]),
+                ),
+                'avg_mean_speed': float(np.mean([row['mean_speed'] for row in episode_rows])),
+                'avg_max_speed': float(np.mean([row['max_speed'] for row in episode_rows])),
+                'avg_violation_steps': float(
+                    np.mean([row['violation_steps'] for row in episode_rows]),
+                ),
+                'avg_unhealthy_steps': float(
+                    np.mean([row['unhealthy_steps'] for row in episode_rows]),
+                ),
+                'eval_episodes': float(eval_episodes),
+            },
+        )
+
+    eval_dir = output_dir / robot / 'evaluation' / f'seed-{seed:03d}'
+    nominal_curve_csv_rows = [
+        {
+            'total_env_steps': row['total_env_steps'],
+            'episode_reward': row['episode_reward'],
+            'episode_cost': row['episode_cost'],
+            'episode_length': row['episode_length'],
+        }
+        for row in nominal_curve_rows
+    ]
+    _write_csv(eval_dir / 'base_task_nominal_train_curve.csv', nominal_curve_csv_rows)
+    nominal_eval_csv_rows = [
+        {
+            'checkpoint': int(row['checkpoint']),
+            'stage_env_steps': row['stage_env_steps'],
+            'cumulative_env_steps': row['cumulative_env_steps'],
+            'avg_base_episode_reward': row['avg_base_episode_reward'],
+            'std_base_episode_reward': row['std_base_episode_reward'],
+            'avg_base_episode_cost': row['avg_base_episode_cost'],
+            'std_base_episode_cost': row['std_base_episode_cost'],
+            'avg_base_episode_length': row['avg_base_episode_length'],
+            'avg_nominal_fraction': row['avg_nominal_fraction'],
+            'avg_mean_speed': row['avg_mean_speed'],
+            'avg_max_speed': row['avg_max_speed'],
+            'avg_violation_steps': row['avg_violation_steps'],
+            'avg_unhealthy_steps': row['avg_unhealthy_steps'],
+            'eval_episodes': int(row['eval_episodes']),
+        }
+        for row in nominal_eval_rows
+    ]
+    _write_csv(eval_dir / 'base_task_nominal_eval_curve.csv', nominal_eval_csv_rows)
+
+    composite_curve_csv_rows = [
+        {
+            'checkpoint': int(row['checkpoint']),
+            'switch_stage_env_steps': row['switch_stage_env_steps'],
+            'cumulative_env_steps': row['cumulative_env_steps'],
+            'avg_base_episode_reward': row['avg_base_episode_reward'],
+            'std_base_episode_reward': row['std_base_episode_reward'],
+            'avg_base_episode_cost': row['avg_base_episode_cost'],
+            'std_base_episode_cost': row['std_base_episode_cost'],
+            'avg_base_episode_length': row['avg_base_episode_length'],
+            'avg_nominal_fraction': row['avg_nominal_fraction'],
+            'avg_mean_speed': row['avg_mean_speed'],
+            'avg_max_speed': row['avg_max_speed'],
+            'avg_violation_steps': row['avg_violation_steps'],
+            'avg_unhealthy_steps': row['avg_unhealthy_steps'],
+            'eval_episodes': int(row['eval_episodes']),
+        }
+        for row in composite_curve_rows
+    ]
+    _write_csv(eval_dir / 'base_task_composite_curve.csv', composite_curve_csv_rows)
+
+    plot_saved = _save_benchmark_curve_plot(
+        nominal_eval_rows=nominal_eval_rows,
+        composite_rows=composite_curve_rows,
+        path=eval_dir / 'base_task_reward_cost_vs_steps.png',
+        title=f'{spec.title} | Base-Task Reward/Cost vs Steps',
+        stage_boundaries=(
+            float(nominal_total_steps),
+            float(nominal_total_steps + recovery_total_steps),
+        ),
+        cost_limit=spec.paper_cost_limit,
+    )
+
+    summary = {
+        'robot': robot,
+        'seed': seed,
+        'base_env_id': spec.nominal_env_id,
+        'paper_eval_env_id': paper_eval_env_id,
+        'paper_cost_limit': spec.paper_cost_limit,
+        'nominal_run_dir': str(nominal_run),
+        'recovery_run_dir': str(recovery_run),
+        'switch_run_dir': str(switch_run),
+        'eval_episodes': eval_episodes,
+        'nominal_total_steps': nominal_total_steps,
+        'recovery_total_steps': recovery_total_steps,
+        'switch_total_steps': switch_total_steps,
+        'stage_boundaries': {
+            'nominal_end': nominal_total_steps,
+            'recovery_end': nominal_total_steps + recovery_total_steps,
+            'switch_end': nominal_total_steps + recovery_total_steps + switch_total_steps,
+        },
+        'checkpoints_evaluated': [path.name for path in switch_checkpoints],
+        'plot_saved': int(plot_saved),
+    }
+    with open(eval_dir / 'base_task_curve_summary.json', 'w', encoding='utf-8') as handle:
+        json.dump(summary, handle, indent=2)
+
+    _log(
+        f'  [base-curve] robot={robot} seed={seed}: wrote benchmark-style curves to {eval_dir}',
+    )
+
+
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description='Three-stage velocity scenario: nominal, recovery, and switch PPO training.',
@@ -1124,6 +1703,13 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument('--eval-episodes', type=int, default=DEFAULT_EVAL_EPISODES)
     parser.add_argument('--trace-episodes', type=int, default=DEFAULT_TRACE_EPISODES)
+    parser.add_argument(
+        '--base-task-eval-episodes',
+        type=int,
+        default=DEFAULT_BASE_TASK_EVAL_EPISODES,
+        help='Number of episodes per saved switch checkpoint when building benchmark-style '
+             'base-task reward/cost curves.',
+    )
     return parser.parse_args()
 
 
@@ -1229,6 +1815,12 @@ def main() -> None:
                         seed=seed,
                         eval_episodes=args.eval_episodes,
                         trace_episodes=args.trace_episodes,
+                    )
+                    _evaluate_base_task_benchmark_curves_seed(
+                        output_dir=output_dir,
+                        robot=robot,
+                        seed=seed,
+                        eval_episodes=args.base_task_eval_episodes,
                     )
                 except FileNotFoundError as error:
                     _log(f'  [eval] skipping robot={robot} seed={seed}: {error}')

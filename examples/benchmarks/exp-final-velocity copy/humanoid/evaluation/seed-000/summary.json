@@ -1,0 +1,46 @@
+{
+  "robot": "humanoid",
+  "seed": 0,
+  "nominal_run_dir": "/home/dasc-lab/Github/omnisafe/examples/benchmarks/exp-final-velocity/humanoid/nominal/PPO-{SafetyHumanoidVelocity-v1}/seed-000-2026-04-21-19-50-40",
+  "recovery_run_dir": "/home/dasc-lab/Github/omnisafe/examples/benchmarks/exp-final-velocity/humanoid/recovery/PPO-{VelocityRecoveryHumanoid-v0}/seed-000-2026-04-21-20-07-14",
+  "switch_run_dir": "/home/dasc-lab/Github/omnisafe/examples/benchmarks/exp-final-velocity/humanoid/switch/PPO-{VelocitySwitchHumanoid-v0}/seed-000-2026-04-21-20-36-41",
+  "switch_checkpoint": "/home/dasc-lab/Github/omnisafe/examples/benchmarks/exp-final-velocity/humanoid/switch/PPO-{VelocitySwitchHumanoid-v0}/seed-000-2026-04-21-20-36-41/torch_save/epoch-50.pt",
+  "eval_episodes": 5,
+  "trace_episodes": 2,
+  "plots_saved": 6,
+  "policies": {
+    "always_nominal": {
+      "episodes": 5.0,
+      "avg_return": 77.8,
+      "avg_episode_cost": 1.6,
+      "avg_episode_length": 127.8,
+      "avg_nominal_fraction": 1.0,
+      "avg_mean_speed": 0.5050531328813439,
+      "avg_max_speed": 1.312058356730455,
+      "avg_violation_steps": 1.6,
+      "avg_unhealthy_steps": 1.0
+    },
+    "always_recovery": {
+      "episodes": 5.0,
+      "avg_return": -10.0,
+      "avg_episode_cost": 0.0,
+      "avg_episode_length": 89.8,
+      "avg_nominal_fraction": 0.0,
+      "avg_mean_speed": 0.3333392844139512,
+      "avg_max_speed": 0.9577257723725181,
+      "avg_violation_steps": 0.0,
+      "avg_unhealthy_steps": 1.0
+    },
+    "learned_switch": {
+      "episodes": 5.0,
+      "avg_return": 115.8,
+      "avg_episode_cost": 0.0,
+      "avg_episode_length": 145.6,
+      "avg_nominal_fraction": 0.8705683956729333,
+      "avg_mean_speed": 0.4136083524963179,
+      "avg_max_speed": 1.056829861258708,
+      "avg_violation_steps": 0.0,
+      "avg_unhealthy_steps": 1.0
+    }
+  }
+}

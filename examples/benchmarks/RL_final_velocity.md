@@ -79,13 +79,13 @@ Custom env ids:
 
 This environment:
 
-- wraps the same base velocity task
+- wraps the paper-style continuous-cost velocity task for the same robot
 - freezes the nominal and recovery PPO actors
 - gives the switch actor only the original base observation
 - exposes a single gate action
 - turns that gate into policy selection
 - rewards nominal usage
-- heavily penalizes constraint violations
+- heavily penalizes continuous velocity cost
 
 ### 5. Frozen policy loader
 
@@ -297,35 +297,39 @@ This is meant to favor:
 
 ### Stage 3: switch PPO
 
-The switch reward is intentionally sparse and close to the scenario description:
+The switch reward is intentionally simple and now uses the paper continuous cost:
 
 ```text
 reward =
     nominal_reward if gate == nominal
-  - violation_penalty * constraint_cost
+  - cost_penalty * continuous_velocity_cost
   - unhealthy_penalty if robot becomes unhealthy
 ```
 
 Interpretation:
 
 - the agent is always tempted to stay on the nominal controller
-- but it pays a large price when that causes a violation
+- but it pays a large price for accumulating continuous velocity cost
 
 This should encourage:
 
 - nominal whenever possible
-- recovery only when necessary
+- recovery when the nominal controller would become too costly under the paper metric
 
 ## Constraint Signal
 
-The current implementation uses the base environment's own per-step velocity cost as the constraint signal.
+The current implementation uses different cost signals in different stages:
 
-That means the switch policy penalty is tied to the same cost logic already defined by the velocity task.
+- nominal training: standard Safety-Gymnasium binary velocity cost env
+- recovery training: standard Safety-Gymnasium binary velocity cost env
+- switch training: paper-style continuous velocity cost env
 
-This is useful because:
+For the switch stage specifically, the cost is the paper-faithful continuous speed cost:
 
-- it avoids hard-coding a second competing speed-limit implementation
-- it keeps the switch stage aligned with the environment's official constraint
+- standard Safety-Gymnasium: `cost = float(speed > threshold)`
+- paper velocity envs: `cost = actual speed`
+
+This is useful because the switch stage, the benchmark-style comparison plots, and the paper continuous cost limits are now aligned to the same cost definition.
 
 ## Health / Stability Signal
 
@@ -445,6 +449,26 @@ exp-final-velocity/
             ...
 ```
 
+Per-seed evaluation now also writes benchmark-comparison artifacts under:
+
+```text
+exp-final-velocity/
+  ant/
+    evaluation/
+      seed-000/
+        episode_metrics.csv
+        step_traces.csv
+        summary.json
+        base_task_nominal_train_curve.csv
+        base_task_nominal_eval_curve.csv
+        base_task_composite_curve.csv
+        base_task_curve_summary.json
+        base_task_reward_cost_vs_steps.png
+        plots/
+          learned_switch_episode_000.png
+          ...
+```
+
 ## CLI Usage
 
 ### Train everything for all three robots
@@ -501,6 +525,14 @@ python examples/benchmarks/RL_final_velocity.py --evaluate-switch
 python examples/benchmarks/RL_final_velocity.py --stages switch --evaluate-switch
 ```
 
+### Change how many episodes each saved switch checkpoint gets in the benchmark-style base-task curves
+
+```bash
+python examples/benchmarks/RL_final_velocity.py \
+  --evaluate-switch \
+  --base-task-eval-episodes 10
+```
+
 ### Example with custom budgets
 
 ```bash
@@ -534,6 +566,7 @@ python examples/benchmarks/RL_final_velocity.py \
 
 - evaluation episodes: `5`
 - trace plots saved for the first `2` episodes per policy
+- base-task benchmark episodes per saved switch checkpoint: `5`
 
 ## Important Implementation Notes
 
@@ -559,7 +592,7 @@ Instead it creates harder initial states by:
 
 This keeps the recovery policy on the task's reachable state manifold.
 
-### Switch evaluation and visualization
+### Switch evaluation, visualization, and benchmark curves
 
 The script now includes a dedicated switch-policy evaluation path.
 
@@ -582,6 +615,65 @@ The current plots show:
 - cost
 - gate decision
 - reward
+
+It also builds a second evaluation view specifically for benchmark comparison.
+
+That path evaluates policies on the paper-style continuous-cost velocity envs:
+
+- `SafetyAntVelocityPaper-v1`
+- `SafetyHalfCheetahVelocityPaper-v1`
+- `SafetyHumanoidVelocityPaper-v1`
+
+More specifically:
+
+- saved nominal checkpoints are evaluated on the paper env to produce a PPO baseline curve
+- saved switch checkpoints are evaluated as the frozen composite controller on the paper env
+
+For each robot and seed it writes:
+
+- `base_task_nominal_train_curve.csv`
+- `base_task_nominal_eval_curve.csv`
+- `base_task_composite_curve.csv`
+- `base_task_curve_summary.json`
+- `base_task_reward_cost_vs_steps.png`
+
+Interpretation:
+
+- `base_task_nominal_train_curve.csv` is the original PPO training log on the standard binary-cost env
+- `base_task_nominal_eval_curve.csv` is the nominal PPO checkpoint-evaluation curve on the paper continuous-cost env
+- `base_task_composite_curve.csv` is the composite checkpoint-evaluation curve on the paper continuous-cost env
+- `base_task_reward_cost_vs_steps.png` is the benchmark-style reward/cost-vs-steps figure built from the paper-env evaluations
+
+The benchmark-style plot uses cumulative environment steps on the x-axis:
+
+- nominal training steps
+- plus recovery training steps
+- plus switch-training steps up to the evaluated checkpoint
+
+The plot also draws vertical stage boundaries at:
+
+- the end of nominal training
+- the end of recovery training
+
+This makes the sample cost of the full three-stage method explicit instead of only counting switch-stage updates.
+
+The cost subplot also draws the paper-style continuous cost limit for the robot:
+
+- Ant: `103.115`
+- HalfCheetah: `151.989`
+- Humanoid: `20.140`
+
+Curve-resolution note:
+
+- the composite benchmark curve is evaluated at saved switch checkpoints, so its point density follows the checkpoint save frequency
+- with the current defaults, this means a small number of evaluation points rather than a fully dense per-epoch curve
+
+Important comparability note:
+
+- the switch env's own `Metrics/EpRet` is a custom gate reward, not the original locomotion reward
+- the switch env's own `Metrics/EpCost` is now on the paper continuous-cost signal
+- but the switch env's own `Metrics/EpRet` is still not the original locomotion reward
+- therefore the benchmark-style comparison must still use the separate paper-env evaluation path for the reward/cost figure
 
 ## TODOs Left in the Code
 
@@ -619,8 +711,7 @@ Future improvement:
 
 If we keep building this scenario, the next high-value additions are:
 
-- a switch-policy evaluation loop with baseline comparisons
-- a plotter for speed and gate traces
+- multi-seed mean-plus-std aggregation plots for the benchmark-style base-task curves
 - paired same-seed nominal/recovery/switch summary tables
 - a deployment script that visualizes when switching happens
 
