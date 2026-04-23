@@ -107,6 +107,12 @@ This makes it easy to:
 - add recovery later
 - retrain only the switch policy
 
+Important update:
+
+- after the switch-stage move to the paper continuous-cost env, old switch checkpoints and old evaluation artifacts are semantically stale
+- nominal and recovery checkpoints can still be reused
+- switch should be retrained and evaluation should be rerun
+
 ## Design Summary
 
 ### High-level pipeline
@@ -513,7 +519,19 @@ python examples/benchmarks/RL_final_velocity.py --stages recovery switch --force
 python examples/benchmarks/RL_final_velocity.py --stages switch --force
 ```
 
+### Retrain switch after the move to paper continuous-cost switch training
+
+```bash
+python examples/benchmarks/RL_final_velocity.py --stages switch --force
+```
+
 ### Evaluate and visualize saved switch checkpoints
+
+```bash
+python examples/benchmarks/RL_final_velocity.py --evaluate-switch
+```
+
+### Refresh benchmark-style plots after a code or checkpoint change
 
 ```bash
 python examples/benchmarks/RL_final_velocity.py --evaluate-switch
@@ -644,6 +662,11 @@ Interpretation:
 - `base_task_composite_curve.csv` is the composite checkpoint-evaluation curve on the paper continuous-cost env
 - `base_task_reward_cost_vs_steps.png` is the benchmark-style reward/cost-vs-steps figure built from the paper-env evaluations
 
+Practical plotting note:
+
+- the plotted PPO baseline in `base_task_reward_cost_vs_steps.png` comes from `base_task_nominal_eval_curve.csv`
+- `base_task_nominal_train_curve.csv` is still useful as a raw training-log reference, but it is not on the same cost definition as the paper-env evaluation curves
+
 The benchmark-style plot uses cumulative environment steps on the x-axis:
 
 - nominal training steps
@@ -674,6 +697,7 @@ Important comparability note:
 - the switch env's own `Metrics/EpCost` is now on the paper continuous-cost signal
 - but the switch env's own `Metrics/EpRet` is still not the original locomotion reward
 - therefore the benchmark-style comparison must still use the separate paper-env evaluation path for the reward/cost figure
+- the switch stage `progress.csv` cost is now on the paper continuous-cost scale, so it is more interpretable against the paper cost limits than older switch runs were
 
 ## TODOs Left in the Code
 
