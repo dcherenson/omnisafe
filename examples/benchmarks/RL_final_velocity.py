@@ -57,6 +57,11 @@ DEFAULT_SEEDS = [0]
 DEFAULT_EVAL_EPISODES = 5
 DEFAULT_TRACE_EPISODES = 2
 DEFAULT_BASE_TASK_EVAL_EPISODES = 5
+DEFAULT_VIDEO_EPISODES = 1
+DEFAULT_VIDEO_WIDTH = 640
+DEFAULT_VIDEO_HEIGHT = 480
+DEFAULT_VIDEO_FPS = 30
+DEFAULT_VIDEO_CAMERA_NAME = 'track'
 
 DEFAULT_TOTAL_STEPS = {
     'nominal': 1_000_000,
@@ -183,12 +188,27 @@ def _to_tensor(value: Any, device: torch.device, dtype: torch.dtype = torch.floa
     return torch.as_tensor(value, dtype=dtype, device=device)
 
 
-def _make_base_velocity_env(env_id: str):
+def _make_base_velocity_env(
+    env_id: str,
+    *,
+    render_mode: str | None = None,
+    width: int = DEFAULT_VIDEO_WIDTH,
+    height: int = DEFAULT_VIDEO_HEIGHT,
+    camera_name: str | None = None,
+):
     import safety_gymnasium
     if 'VelocityPaper-v1' in env_id:
         import omnisafe.envs.paper_velocity_envs  # noqa: F401
 
-    env = safety_gymnasium.make(id=env_id, autoreset=False)
+    make_kwargs: dict[str, Any] = {'id': env_id, 'autoreset': False}
+    if render_mode is not None:
+        make_kwargs['render_mode'] = render_mode
+        make_kwargs['width'] = width
+        make_kwargs['height'] = height
+        if camera_name:
+            make_kwargs['camera_name'] = camera_name
+
+    env = safety_gymnasium.make(**make_kwargs)
     assert isinstance(env.action_space, spaces.Box), 'This scenario only supports Box actions.'
     assert isinstance(
         env.observation_space,
@@ -236,6 +256,15 @@ def _gate_action_space() -> spaces.Box:
         high=np.ones(1, dtype=np.float32),
         dtype=np.float32,
     )
+
+
+def _pop_render_kwargs(kwargs: dict[str, Any]) -> dict[str, Any]:
+    return {
+        'render_mode': kwargs.pop('render_mode', None),
+        'width': int(kwargs.pop('width', DEFAULT_VIDEO_WIDTH)),
+        'height': int(kwargs.pop('height', DEFAULT_VIDEO_HEIGHT)),
+        'camera_name': kwargs.pop('camera_name', None),
+    }
 
 
 def _stage_root(output_dir: Path, robot: str, stage: str) -> Path:
@@ -423,9 +452,10 @@ class VelocityRecoveryEnv(CMDP):
         super().__init__(env_id)
         self._device = torch.device(device)
         self._spec = _resolve_robot_spec(env_id)
+        render_kwargs = _pop_render_kwargs(kwargs)
         # Train the switcher on the paper-style continuous-cost task so its
         # reward shaping and logged episode cost align with the paper limit.
-        self._base_env = _make_base_velocity_env(self._spec.paper_eval_env_id)
+        self._base_env = _make_base_velocity_env(self._spec.paper_eval_env_id, **render_kwargs)
         # Match the baseline safe-velocity information pattern as closely as
         # possible: the recovery actor only sees the base environment
         # observation at decision time.
@@ -626,7 +656,8 @@ class VelocitySwitchEnv(CMDP):
         super().__init__(env_id)
         self._device = torch.device(device)
         self._spec = _resolve_robot_spec(env_id)
-        self._base_env = _make_base_velocity_env(self._spec.nominal_env_id)
+        render_kwargs = _pop_render_kwargs(kwargs)
+        self._base_env = _make_base_velocity_env(self._spec.nominal_env_id, **render_kwargs)
 
         self._gate_action_space = _gate_action_space()
         # Match the baseline safe-velocity setup: the switch actor only sees
@@ -933,6 +964,53 @@ def _maybe_import_pyplot():
     return plt
 
 
+def _capture_render_frame(env: Any) -> tuple[np.ndarray | None, str | None]:
+    try:
+        frame = env.render()
+    except Exception as error:  # pragma: no cover - best-effort visualization path
+        return None, str(error)
+
+    if frame is None:
+        return None, 'render returned None'
+
+    frame_np = np.asarray(frame)
+    if frame_np.ndim != 3:
+        return None, f'unexpected frame shape {frame_np.shape!r}'
+    return frame_np.copy(), None
+
+
+def _save_rollout_video(
+    frames: list[np.ndarray],
+    video_dir: Path,
+    name_prefix: str,
+    episode_index: int,
+    fps: int,
+) -> tuple[Path | None, str | None]:
+    if not frames:
+        return None, 'no frames captured'
+
+    try:
+        from gymnasium.utils.save_video import save_video
+    except Exception as error:  # pragma: no cover - depends on local video deps
+        return None, str(error)
+
+    video_dir.mkdir(parents=True, exist_ok=True)
+    video_path = video_dir / f'{name_prefix}-episode-{episode_index}.mp4'
+    try:
+        save_video(
+            frames,
+            str(video_dir),
+            fps=fps,
+            episode_trigger=lambda _episode: True,
+            video_length=len(frames),
+            episode_index=episode_index,
+            name_prefix=name_prefix,
+        )
+    except Exception as error:  # pragma: no cover - depends on local codecs
+        return None, str(error)
+    return video_path, None
+
+
 def _save_trace_plot(trace_rows: list[dict[str, Any]], path: Path, title: str) -> bool:
     if not trace_rows:
         return False
@@ -1202,15 +1280,25 @@ def _rollout_switch_policy(
     episode: int,
     seed: int,
     action_fn,
-) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    capture_video: bool = False,
+) -> tuple[dict[str, Any], list[dict[str, Any]], list[np.ndarray], list[str]]:
     obs_t, _info = env.reset(seed=seed)
     obs_np = obs_t.detach().cpu().numpy()
 
     trace_rows: list[dict[str, Any]] = []
+    video_frames: list[np.ndarray] = []
+    video_errors: list[str] = []
     ep_return = 0.0
     ep_cost = 0.0
     terminated = False
     truncated = False
+
+    if capture_video:
+        frame, render_error = _capture_render_frame(env)
+        if frame is not None:
+            video_frames.append(frame)
+        elif render_error is not None:
+            video_errors.append(render_error)
 
     while not (terminated or truncated):
         gate_action = _clip_to_action_space(action_fn(obs_np), env.action_space)
@@ -1243,6 +1331,12 @@ def _rollout_switch_policy(
         )
 
         obs_np = next_obs_t.detach().cpu().numpy()
+        if capture_video:
+            frame, render_error = _capture_render_frame(env)
+            if frame is not None:
+                video_frames.append(frame)
+            elif render_error is not None:
+                video_errors.append(render_error)
 
     nominal_fraction = float(np.mean([row['gate'] for row in trace_rows])) if trace_rows else 0.0
     mean_speed = float(np.mean([row['speed'] for row in trace_rows])) if trace_rows else 0.0
@@ -1266,7 +1360,7 @@ def _rollout_switch_policy(
         'terminated': int(terminated),
         'truncated': int(truncated),
     }
-    return episode_row, trace_rows
+    return episode_row, trace_rows, video_frames, video_errors
 
 
 def _summarize_episode_rows(rows: list[dict[str, Any]]) -> dict[str, dict[str, float]]:
@@ -1294,6 +1388,11 @@ def _evaluate_switch_seed(
     seed: int,
     eval_episodes: int,
     trace_episodes: int,
+    video_episodes: int,
+    video_width: int,
+    video_height: int,
+    video_fps: int,
+    video_camera_name: str,
 ) -> None:
     spec = ROBOT_SPECS[robot]
     nominal_run = _require_stage_run(output_dir, robot, 'nominal', seed)
@@ -1303,7 +1402,15 @@ def _evaluate_switch_seed(
     _set_runtime_policy_dir('nominal', robot, nominal_run)
     _set_runtime_policy_dir('recovery', robot, recovery_run)
 
-    env = VelocitySwitchEnv(spec.switch_env_id, device=torch.device('cpu'))
+    render_enabled = video_episodes > 0
+    env = VelocitySwitchEnv(
+        spec.switch_env_id,
+        device=torch.device('cpu'),
+        render_mode='rgb_array' if render_enabled else None,
+        width=video_width,
+        height=video_height,
+        camera_name=video_camera_name,
+    )
     switch_actor = SavedOmniSafeActor(
         run_dir=switch_run,
         obs_space=env.observation_space,
@@ -1320,18 +1427,46 @@ def _evaluate_switch_seed(
 
     episode_rows: list[dict[str, Any]] = []
     trace_rows: list[dict[str, Any]] = []
+    video_entries: list[dict[str, Any]] = []
+    video_errors: list[str] = []
     for label, action_fn in policy_fns.items():
         for episode in range(eval_episodes):
             episode_seed = 10_000 + seed * 100 + episode
-            ep_row, ep_trace = _rollout_switch_policy(
+            capture_video = render_enabled and episode < min(video_episodes, eval_episodes)
+            ep_row, ep_trace, video_frames, rollout_video_errors = _rollout_switch_policy(
                 env=env,
                 label=label,
                 episode=episode,
                 seed=episode_seed,
                 action_fn=action_fn,
+                capture_video=capture_video,
             )
             episode_rows.append(ep_row)
             trace_rows.extend(ep_trace)
+            video_errors.extend(rollout_video_errors)
+            if capture_video:
+                saved_path, save_error = _save_rollout_video(
+                    frames=video_frames,
+                    video_dir=output_dir / robot / 'evaluation' / f'seed-{seed:03d}' / 'videos',
+                    name_prefix=label,
+                    episode_index=episode,
+                    fps=video_fps,
+                )
+                if saved_path is not None:
+                    video_entries.append(
+                        {
+                            'label': label,
+                            'episode': episode,
+                            'path': str(saved_path),
+                            'frames': len(video_frames),
+                            'fps': video_fps,
+                            'camera_name': video_camera_name,
+                            'width': video_width,
+                            'height': video_height,
+                        },
+                    )
+                elif save_error is not None:
+                    video_errors.append(save_error)
 
     env.close()
 
@@ -1361,6 +1496,13 @@ def _evaluate_switch_seed(
         'switch_checkpoint': str(switch_actor.checkpoint_path),
         'eval_episodes': eval_episodes,
         'trace_episodes': min(trace_episodes, eval_episodes),
+        'video_episodes': min(video_episodes, eval_episodes),
+        'video_fps': video_fps,
+        'video_camera_name': video_camera_name,
+        'video_resolution': {'width': video_width, 'height': video_height},
+        'videos_saved': len(video_entries),
+        'videos': video_entries,
+        'video_errors': sorted(set(video_errors)),
         'plots_saved': plot_count,
         'policies': _summarize_episode_rows(episode_rows),
     }
@@ -1375,6 +1517,15 @@ def _evaluate_switch_seed(
             f'cost={metrics["avg_episode_cost"]:6.2f} '
             f'nom={100.0 * metrics["avg_nominal_fraction"]:5.1f}% '
             f'viol_steps={metrics["avg_violation_steps"]:5.2f}',
+        )
+    if video_entries:
+        _log(
+            f'    saved {len(video_entries)} evaluation video(s) under {eval_dir / "videos"}',
+        )
+    elif render_enabled and video_errors:
+        _log(
+            '    video capture requested, but no videos were saved. '
+            f'First error: {video_errors[0]}',
         )
 
 
@@ -1704,6 +1855,21 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument('--eval-episodes', type=int, default=DEFAULT_EVAL_EPISODES)
     parser.add_argument('--trace-episodes', type=int, default=DEFAULT_TRACE_EPISODES)
     parser.add_argument(
+        '--video-episodes',
+        type=int,
+        default=DEFAULT_VIDEO_EPISODES,
+        help='Number of evaluation episodes per policy to save as rendered videos. Set 0 to disable.',
+    )
+    parser.add_argument('--video-width', type=int, default=DEFAULT_VIDEO_WIDTH)
+    parser.add_argument('--video-height', type=int, default=DEFAULT_VIDEO_HEIGHT)
+    parser.add_argument('--video-fps', type=int, default=DEFAULT_VIDEO_FPS)
+    parser.add_argument(
+        '--video-camera-name',
+        type=str,
+        default=DEFAULT_VIDEO_CAMERA_NAME,
+        help='Safety-Gymnasium camera used for evaluation videos.',
+    )
+    parser.add_argument(
         '--base-task-eval-episodes',
         type=int,
         default=DEFAULT_BASE_TASK_EVAL_EPISODES,
@@ -1815,6 +1981,11 @@ def main() -> None:
                         seed=seed,
                         eval_episodes=args.eval_episodes,
                         trace_episodes=args.trace_episodes,
+                        video_episodes=max(0, args.video_episodes),
+                        video_width=args.video_width,
+                        video_height=args.video_height,
+                        video_fps=args.video_fps,
+                        video_camera_name=args.video_camera_name,
                     )
                     _evaluate_base_task_benchmark_curves_seed(
                         output_dir=output_dir,

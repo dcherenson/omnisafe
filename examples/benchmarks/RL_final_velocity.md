@@ -470,6 +470,10 @@ exp-final-velocity/
         base_task_composite_curve.csv
         base_task_curve_summary.json
         base_task_reward_cost_vs_steps.png
+        videos/
+          learned_switch-episode-0.mp4
+          always_nominal-episode-0.mp4
+          always_recovery-episode-0.mp4
         plots/
           learned_switch_episode_000.png
           ...
@@ -531,6 +535,32 @@ python examples/benchmarks/RL_final_velocity.py --stages switch --force
 python examples/benchmarks/RL_final_velocity.py --evaluate-switch
 ```
 
+### Save more rendered evaluation videos per policy
+
+```bash
+python examples/benchmarks/RL_final_velocity.py \
+  --evaluate-switch \
+  --video-episodes 3
+```
+
+### Disable rendered videos during evaluation
+
+```bash
+python examples/benchmarks/RL_final_velocity.py \
+  --evaluate-switch \
+  --video-episodes 0
+```
+
+### Use a different render camera or resolution
+
+```bash
+python examples/benchmarks/RL_final_velocity.py \
+  --evaluate-switch \
+  --video-camera-name fixedfar \
+  --video-width 960 \
+  --video-height 720
+```
+
 ### Refresh benchmark-style plots after a code or checkpoint change
 
 ```bash
@@ -584,6 +614,10 @@ python examples/benchmarks/RL_final_velocity.py \
 
 - evaluation episodes: `5`
 - trace plots saved for the first `2` episodes per policy
+- rendered videos saved for the first `1` episode per policy
+- default video camera: `track`
+- default video resolution: `640 x 480`
+- default video fps: `30`
 - base-task benchmark episodes per saved switch checkpoint: `5`
 
 ## Important Implementation Notes
@@ -625,6 +659,7 @@ For each robot and seed it writes:
 - `episode_metrics.csv`
 - `step_traces.csv`
 - `summary.json`
+- videos under `videos/` for the first `video_episodes` episodes of each policy
 - trace plots under `plots/` when `matplotlib` is available
 
 The current plots show:
@@ -633,6 +668,13 @@ The current plots show:
 - cost
 - gate decision
 - reward
+
+Rendered-video details:
+
+- videos are recorded during the same switch-evaluation rollouts that generate the CSV traces
+- the default camera is `track` so you can see the robot body moving in the scene
+- filenames follow Gymnasium's `save_video` naming pattern, for example `learned_switch-episode-0.mp4`
+- if local video dependencies are missing, evaluation still runs and `summary.json` records the video errors instead of crashing
 
 It also builds a second evaluation view specifically for benchmark comparison.
 
