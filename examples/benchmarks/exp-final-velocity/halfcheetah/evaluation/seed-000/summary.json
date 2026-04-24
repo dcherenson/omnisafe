@@ -1,12 +1,53 @@
 {
   "robot": "halfcheetah",
   "seed": 0,
-  "nominal_run_dir": "/home/dasc-lab/Github/omnisafe/examples/benchmarks/exp-final-velocity/halfcheetah/nominal/PPO-{SafetyHalfCheetahVelocity-v1}/seed-000-2026-04-21-19-20-17",
-  "recovery_run_dir": "/home/dasc-lab/Github/omnisafe/examples/benchmarks/exp-final-velocity/halfcheetah/recovery/PPO-{VelocityRecoveryHalfCheetah-v0}/seed-000-2026-04-21-19-34-34",
-  "switch_run_dir": "/home/dasc-lab/Github/omnisafe/examples/benchmarks/exp-final-velocity/halfcheetah/switch/PPO-{VelocitySwitchHalfCheetah-v0}/seed-000-2026-04-22-15-04-18",
-  "switch_checkpoint": "/home/dasc-lab/Github/omnisafe/examples/benchmarks/exp-final-velocity/halfcheetah/switch/PPO-{VelocitySwitchHalfCheetah-v0}/seed-000-2026-04-22-15-04-18/torch_save/epoch-50.pt",
+  "nominal_run_dir": "/home/dasc-lab/Github/omnisafe/examples/benchmarks/exp-final-velocity/halfcheetah/nominal/PPO-{SafetyHalfCheetahVelocity-v1}/seed-000-2026-04-23-14-59-41",
+  "recovery_run_dir": "/home/dasc-lab/Github/omnisafe/examples/benchmarks/exp-final-velocity/halfcheetah/recovery/PPO-{VelocityRecoveryHalfCheetah-v0}/seed-000-2026-04-23-15-13-18",
+  "switch_run_dir": "/home/dasc-lab/Github/omnisafe/examples/benchmarks/exp-final-velocity/halfcheetah/switch/PPO-{VelocitySwitchHalfCheetah-v0}/seed-000-2026-04-23-15-28-30",
+  "switch_checkpoint": "/home/dasc-lab/Github/omnisafe/examples/benchmarks/exp-final-velocity/halfcheetah/switch/PPO-{VelocitySwitchHalfCheetah-v0}/seed-000-2026-04-23-15-28-30/torch_save/epoch-100.pt",
   "eval_episodes": 5,
   "trace_episodes": 2,
+  "video_episodes": 1,
+  "video_fps": 30,
+  "video_camera_name": "track",
+  "video_resolution": {
+    "width": 640,
+    "height": 480
+  },
+  "videos_saved": 3,
+  "videos": [
+    {
+      "label": "learned_switch",
+      "episode": 0,
+      "path": "/home/dasc-lab/Github/omnisafe/examples/benchmarks/exp-final-velocity/halfcheetah/evaluation/seed-000/videos/learned_switch-episode-0.mp4",
+      "frames": 1001,
+      "fps": 30,
+      "camera_name": "track",
+      "width": 640,
+      "height": 480
+    },
+    {
+      "label": "always_nominal",
+      "episode": 0,
+      "path": "/home/dasc-lab/Github/omnisafe/examples/benchmarks/exp-final-velocity/halfcheetah/evaluation/seed-000/videos/always_nominal-episode-0.mp4",
+      "frames": 1001,
+      "fps": 30,
+      "camera_name": "track",
+      "width": 640,
+      "height": 480
+    },
+    {
+      "label": "always_recovery",
+      "episode": 0,
+      "path": "/home/dasc-lab/Github/omnisafe/examples/benchmarks/exp-final-velocity/halfcheetah/evaluation/seed-000/videos/always_recovery-episode-0.mp4",
+      "frames": 1001,
+      "fps": 30,
+      "camera_name": "track",
+      "width": 640,
+      "height": 480
+    }
+  ],
+  "video_errors": [],
   "plots_saved": 6,
   "policies": {
     "always_nominal": {
@@ -26,19 +67,19 @@
       "avg_episode_cost": 0.0,
       "avg_episode_length": 1000.0,
       "avg_nominal_fraction": 0.0,
-      "avg_mean_speed": 0.014434227042643914,
-      "avg_max_speed": 0.5080839223111585,
+      "avg_mean_speed": 0.005443970593714416,
+      "avg_max_speed": 0.4275045847699365,
       "avg_violation_steps": 0.0,
       "avg_unhealthy_steps": 0.0
     },
     "learned_switch": {
       "episodes": 5.0,
-      "avg_return": 959.8,
+      "avg_return": 869.2,
       "avg_episode_cost": 0.0,
       "avg_episode_length": 1000.0,
-      "avg_nominal_fraction": 0.9598000000000001,
-      "avg_mean_speed": 0.6010837722823758,
-      "avg_max_speed": 1.4131505297086406,
+      "avg_nominal_fraction": 0.8692,
+      "avg_mean_speed": 1.1944511724130957,
+      "avg_max_speed": 3.0387589902256487,
       "avg_violation_steps": 0.0,
       "avg_unhealthy_steps": 0.0
     }

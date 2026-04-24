@@ -2,27 +2,26 @@
   "robot": "humanoid",
   "seed": 0,
   "base_env_id": "SafetyHumanoidVelocity-v1",
-  "paper_eval_env_id": "SafetyHumanoidVelocityPaper-v1",
-  "paper_cost_limit": 20.14,
-  "nominal_run_dir": "/home/dasc-lab/Github/omnisafe/examples/benchmarks/exp-final-velocity/humanoid/nominal/PPO-{SafetyHumanoidVelocity-v1}/seed-000-2026-04-21-19-50-40",
-  "recovery_run_dir": "/home/dasc-lab/Github/omnisafe/examples/benchmarks/exp-final-velocity/humanoid/recovery/PPO-{VelocityRecoveryHumanoid-v0}/seed-000-2026-04-21-20-07-14",
-  "switch_run_dir": "/home/dasc-lab/Github/omnisafe/examples/benchmarks/exp-final-velocity/humanoid/switch/PPO-{VelocitySwitchHumanoid-v0}/seed-000-2026-04-22-15-14-37",
+  "cost_limit": 25.0,
+  "nominal_run_dir": "/home/dasc-lab/Github/omnisafe/examples/benchmarks/exp-final-velocity/humanoid/nominal/PPO-{SafetyHumanoidVelocity-v1}/seed-000-2026-04-23-15-42-49",
+  "recovery_run_dir": "/home/dasc-lab/Github/omnisafe/examples/benchmarks/exp-final-velocity/humanoid/recovery/PPO-{VelocityRecoveryHumanoid-v0}/seed-000-2026-04-23-15-59-08",
+  "switch_run_dir": "/home/dasc-lab/Github/omnisafe/examples/benchmarks/exp-final-velocity/humanoid/switch/PPO-{VelocitySwitchHumanoid-v0}/seed-000-2026-04-23-16-59-18",
   "eval_episodes": 5,
   "nominal_total_steps": 1000000,
-  "recovery_total_steps": 500000,
-  "switch_total_steps": 500000,
+  "recovery_total_steps": 1000000,
+  "switch_total_steps": 1000000,
   "stage_boundaries": {
     "nominal_end": 1000000,
-    "recovery_end": 1500000,
-    "switch_end": 2000000
+    "recovery_end": 2000000,
+    "switch_end": 3000000
   },
   "checkpoints_evaluated": [
     "epoch-0.pt",
-    "epoch-10.pt",
     "epoch-20.pt",
-    "epoch-30.pt",
     "epoch-40.pt",
-    "epoch-50.pt"
+    "epoch-60.pt",
+    "epoch-80.pt",
+    "epoch-100.pt"
   ],
   "plot_saved": 1
 }

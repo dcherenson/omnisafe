@@ -2,27 +2,26 @@
   "robot": "ant",
   "seed": 0,
   "base_env_id": "SafetyAntVelocity-v1",
-  "paper_eval_env_id": "SafetyAntVelocityPaper-v1",
-  "paper_cost_limit": 103.115,
-  "nominal_run_dir": "/home/dasc-lab/Github/omnisafe/examples/benchmarks/exp-final-velocity/ant/nominal/PPO-{SafetyAntVelocity-v1}/seed-000-2026-04-21-16-38-42",
-  "recovery_run_dir": "/home/dasc-lab/Github/omnisafe/examples/benchmarks/exp-final-velocity/ant/recovery/PPO-{VelocityRecoveryAnt-v0}/seed-000-2026-04-21-16-54-35",
-  "switch_run_dir": "/home/dasc-lab/Github/omnisafe/examples/benchmarks/exp-final-velocity/ant/switch/PPO-{VelocitySwitchAnt-v0}/seed-000-2026-04-22-14-53-21",
+  "cost_limit": 25.0,
+  "nominal_run_dir": "/home/dasc-lab/Github/omnisafe/examples/benchmarks/exp-final-velocity/ant/nominal/PPO-{SafetyAntVelocity-v1}/seed-000-2026-04-23-13-57-40",
+  "recovery_run_dir": "/home/dasc-lab/Github/omnisafe/examples/benchmarks/exp-final-velocity/ant/recovery/PPO-{VelocityRecoveryAnt-v0}/seed-000-2026-04-23-14-14-00",
+  "switch_run_dir": "/home/dasc-lab/Github/omnisafe/examples/benchmarks/exp-final-velocity/ant/switch/PPO-{VelocitySwitchAnt-v0}/seed-000-2026-04-23-14-41-43",
   "eval_episodes": 5,
   "nominal_total_steps": 1000000,
-  "recovery_total_steps": 500000,
-  "switch_total_steps": 500000,
+  "recovery_total_steps": 1000000,
+  "switch_total_steps": 1000000,
   "stage_boundaries": {
     "nominal_end": 1000000,
-    "recovery_end": 1500000,
-    "switch_end": 2000000
+    "recovery_end": 2000000,
+    "switch_end": 3000000
   },
   "checkpoints_evaluated": [
     "epoch-0.pt",
-    "epoch-10.pt",
     "epoch-20.pt",
-    "epoch-30.pt",
     "epoch-40.pt",
-    "epoch-50.pt"
+    "epoch-60.pt",
+    "epoch-80.pt",
+    "epoch-100.pt"
   ],
   "plot_saved": 1
 }
