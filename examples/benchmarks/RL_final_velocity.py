@@ -62,11 +62,12 @@ DEFAULT_VIDEO_WIDTH = 640
 DEFAULT_VIDEO_HEIGHT = 480
 DEFAULT_VIDEO_FPS = 30
 DEFAULT_VIDEO_CAMERA_NAME = 'track'
+DEFAULT_BASELINE_COST_LIMIT = 25.0
 
 DEFAULT_TOTAL_STEPS = {
     'nominal': 1_000_000,
-    'recovery': 500_000,
-    'switch': 500_000,
+    'recovery': 1_000_000,
+    'switch': 1_000_000,
 }
 DEFAULT_STEPS_PER_EPOCH = {
     'nominal': 20_000,
@@ -98,8 +99,6 @@ class VelocityRobotSpec:
     key: str
     title: str
     nominal_env_id: str
-    paper_eval_env_id: str
-    paper_cost_limit: float
     recovery_env_id: str
     switch_env_id: str
     stop_speed: float
@@ -114,8 +113,6 @@ ROBOT_SPECS: dict[str, VelocityRobotSpec] = {
         key='ant',
         title='Ant',
         nominal_env_id='SafetyAntVelocity-v1',
-        paper_eval_env_id='SafetyAntVelocityPaper-v1',
-        paper_cost_limit=103.115,
         recovery_env_id='VelocityRecoveryAnt-v0',
         switch_env_id='VelocitySwitchAnt-v0',
         stop_speed=0.60,
@@ -128,8 +125,6 @@ ROBOT_SPECS: dict[str, VelocityRobotSpec] = {
         key='halfcheetah',
         title='HalfCheetah',
         nominal_env_id='SafetyHalfCheetahVelocity-v1',
-        paper_eval_env_id='SafetyHalfCheetahVelocityPaper-v1',
-        paper_cost_limit=151.989,
         recovery_env_id='VelocityRecoveryHalfCheetah-v0',
         switch_env_id='VelocitySwitchHalfCheetah-v0',
         stop_speed=0.50,
@@ -142,8 +137,6 @@ ROBOT_SPECS: dict[str, VelocityRobotSpec] = {
         key='humanoid',
         title='Humanoid',
         nominal_env_id='SafetyHumanoidVelocity-v1',
-        paper_eval_env_id='SafetyHumanoidVelocityPaper-v1',
-        paper_cost_limit=20.140,
         recovery_env_id='VelocityRecoveryHumanoid-v0',
         switch_env_id='VelocitySwitchHumanoid-v0',
         stop_speed=0.35,
@@ -197,8 +190,6 @@ def _make_base_velocity_env(
     camera_name: str | None = None,
 ):
     import safety_gymnasium
-    if 'VelocityPaper-v1' in env_id:
-        import omnisafe.envs.paper_velocity_envs  # noqa: F401
 
     make_kwargs: dict[str, Any] = {'id': env_id, 'autoreset': False}
     if render_mode is not None:
@@ -453,9 +444,7 @@ class VelocityRecoveryEnv(CMDP):
         self._device = torch.device(device)
         self._spec = _resolve_robot_spec(env_id)
         render_kwargs = _pop_render_kwargs(kwargs)
-        # Train the switcher on the paper-style continuous-cost task so its
-        # reward shaping and logged episode cost align with the paper limit.
-        self._base_env = _make_base_velocity_env(self._spec.paper_eval_env_id, **render_kwargs)
+        self._base_env = _make_base_velocity_env(self._spec.nominal_env_id, **render_kwargs)
         # Match the baseline safe-velocity information pattern as closely as
         # possible: the recovery actor only sees the base environment
         # observation at decision time.
@@ -684,7 +673,7 @@ class VelocitySwitchEnv(CMDP):
 
         self._metadata = {
             'robot': self._spec.title,
-            'base_env_id': self._spec.paper_eval_env_id,
+            'base_env_id': self._spec.nominal_env_id,
             'nominal_run_dir': str(nominal_run_dir),
             'recovery_run_dir': str(recovery_run_dir),
         }
@@ -1259,7 +1248,7 @@ def _save_benchmark_curve_plot(
             color='black',
             linestyle='--',
             linewidth=1.2,
-            label=f'Paper Limit ({cost_limit:.3f})',
+            label=f'Cost Limit ({cost_limit:.0f})',
         )
     axes[1].legend()
 
@@ -1557,7 +1546,7 @@ def _evaluate_base_task_benchmark_curves_seed(
     base_obs_space = reference_env.observation_space
     base_action_space = reference_env.action_space
     reference_env.close()
-    paper_eval_env_id = spec.paper_eval_env_id
+    base_eval_env_id = spec.nominal_env_id
 
     recovery_actor = SavedOmniSafeActor(
         run_dir=recovery_run,
@@ -1583,7 +1572,7 @@ def _evaluate_base_task_benchmark_curves_seed(
             episode_seed = 15_000 + seed * 100 + episode
             episode_rows.append(
                 _rollout_nominal_base_policy(
-                    env_id=paper_eval_env_id,
+                    env_id=base_eval_env_id,
                     nominal_actor=nominal_actor,
                     episode=episode,
                     seed=episode_seed,
@@ -1651,7 +1640,7 @@ def _evaluate_base_task_benchmark_curves_seed(
             episode_seed = 20_000 + seed * 100 + episode
             episode_rows.append(
                 _rollout_base_composite_policy(
-                    env_id=paper_eval_env_id,
+                    env_id=base_eval_env_id,
                     nominal_actor=nominal_actor,
                     recovery_actor=recovery_actor,
                     switch_actor=switch_actor,
@@ -1762,15 +1751,14 @@ def _evaluate_base_task_benchmark_curves_seed(
             float(nominal_total_steps),
             float(nominal_total_steps + recovery_total_steps),
         ),
-        cost_limit=spec.paper_cost_limit,
+        cost_limit=DEFAULT_BASELINE_COST_LIMIT,
     )
 
     summary = {
         'robot': robot,
         'seed': seed,
-        'base_env_id': spec.nominal_env_id,
-        'paper_eval_env_id': paper_eval_env_id,
-        'paper_cost_limit': spec.paper_cost_limit,
+        'base_env_id': base_eval_env_id,
+        'cost_limit': DEFAULT_BASELINE_COST_LIMIT,
         'nominal_run_dir': str(nominal_run),
         'recovery_run_dir': str(recovery_run),
         'switch_run_dir': str(switch_run),

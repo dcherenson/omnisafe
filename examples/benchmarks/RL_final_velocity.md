@@ -79,13 +79,13 @@ Custom env ids:
 
 This environment:
 
-- wraps the paper-style continuous-cost velocity task for the same robot
+- wraps the standard Safety-Gymnasium velocity task for the same robot
 - freezes the nominal and recovery PPO actors
 - gives the switch actor only the original base observation
 - exposes a single gate action
 - turns that gate into policy selection
 - rewards nominal usage
-- heavily penalizes continuous velocity cost
+- heavily penalizes default binary velocity-cost violations
 
 ### 5. Frozen policy loader
 
@@ -109,9 +109,9 @@ This makes it easy to:
 
 Important update:
 
-- after the switch-stage move to the paper continuous-cost env, old switch checkpoints and old evaluation artifacts are semantically stale
-- nominal and recovery checkpoints can still be reused
-- switch should be retrained and evaluation should be rerun
+- after the move back to the standard OmniSafe / Safety-Gymnasium cost definition, old recovery and switch checkpoints and old evaluation artifacts are semantically stale
+- nominal checkpoints can still be reused
+- recovery and switch should be retrained and evaluation should be rerun
 
 ## Design Summary
 
@@ -303,39 +303,38 @@ This is meant to favor:
 
 ### Stage 3: switch PPO
 
-The switch reward is intentionally simple and now uses the paper continuous cost:
+The switch reward is intentionally simple and uses the default Safety-Gymnasium cost:
 
 ```text
 reward =
     nominal_reward if gate == nominal
-  - cost_penalty * continuous_velocity_cost
+  - cost_penalty * velocity_cost
   - unhealthy_penalty if robot becomes unhealthy
 ```
 
 Interpretation:
 
 - the agent is always tempted to stay on the nominal controller
-- but it pays a large price for accumulating continuous velocity cost
+- but it pays a large price for violating the default velocity constraint
 
 This should encourage:
 
 - nominal whenever possible
-- recovery when the nominal controller would become too costly under the paper metric
+- recovery when the nominal controller is likely to violate the default velocity constraint
 
 ## Constraint Signal
 
-The current implementation uses different cost signals in different stages:
+The current implementation now uses the same default cost signal in all three stages:
 
 - nominal training: standard Safety-Gymnasium binary velocity cost env
 - recovery training: standard Safety-Gymnasium binary velocity cost env
-- switch training: paper-style continuous velocity cost env
+- switch training: standard Safety-Gymnasium binary velocity cost env
 
-For the switch stage specifically, the cost is the paper-faithful continuous speed cost:
+For these tasks, the per-step env cost is the standard Safety-Gymnasium thresholded velocity cost:
 
 - standard Safety-Gymnasium: `cost = float(speed > threshold)`
-- paper velocity envs: `cost = actual speed`
 
-This is useful because the switch stage, the benchmark-style comparison plots, and the paper continuous cost limits are now aligned to the same cost definition.
+The benchmark-style comparison plots also use the same standard env cost definition and draw the usual OmniSafe safe-RL budget line at `25`.
 
 ## Health / Stability Signal
 
@@ -523,10 +522,10 @@ python examples/benchmarks/RL_final_velocity.py --stages recovery switch --force
 python examples/benchmarks/RL_final_velocity.py --stages switch --force
 ```
 
-### Retrain switch after the move to paper continuous-cost switch training
+### Retrain recovery and switch after moving back to standard OmniSafe / Safety-Gymnasium costs
 
 ```bash
-python examples/benchmarks/RL_final_velocity.py --stages switch --force
+python examples/benchmarks/RL_final_velocity.py --stages recovery switch --force
 ```
 
 ### Evaluate and visualize saved switch checkpoints
@@ -678,16 +677,16 @@ Rendered-video details:
 
 It also builds a second evaluation view specifically for benchmark comparison.
 
-That path evaluates policies on the paper-style continuous-cost velocity envs:
+That path evaluates policies on the standard velocity envs:
 
-- `SafetyAntVelocityPaper-v1`
-- `SafetyHalfCheetahVelocityPaper-v1`
-- `SafetyHumanoidVelocityPaper-v1`
+- `SafetyAntVelocity-v1`
+- `SafetyHalfCheetahVelocity-v1`
+- `SafetyHumanoidVelocity-v1`
 
 More specifically:
 
-- saved nominal checkpoints are evaluated on the paper env to produce a PPO baseline curve
-- saved switch checkpoints are evaluated as the frozen composite controller on the paper env
+- saved nominal checkpoints are evaluated on the standard env to produce a PPO baseline curve
+- saved switch checkpoints are evaluated as the frozen composite controller on the standard env
 
 For each robot and seed it writes:
 
@@ -700,14 +699,14 @@ For each robot and seed it writes:
 Interpretation:
 
 - `base_task_nominal_train_curve.csv` is the original PPO training log on the standard binary-cost env
-- `base_task_nominal_eval_curve.csv` is the nominal PPO checkpoint-evaluation curve on the paper continuous-cost env
-- `base_task_composite_curve.csv` is the composite checkpoint-evaluation curve on the paper continuous-cost env
-- `base_task_reward_cost_vs_steps.png` is the benchmark-style reward/cost-vs-steps figure built from the paper-env evaluations
+- `base_task_nominal_eval_curve.csv` is the nominal PPO checkpoint-evaluation curve on the standard binary-cost env
+- `base_task_composite_curve.csv` is the composite checkpoint-evaluation curve on the standard binary-cost env
+- `base_task_reward_cost_vs_steps.png` is the benchmark-style reward/cost-vs-steps figure built from the standard-env evaluations
 
 Practical plotting note:
 
 - the plotted PPO baseline in `base_task_reward_cost_vs_steps.png` comes from `base_task_nominal_eval_curve.csv`
-- `base_task_nominal_train_curve.csv` is still useful as a raw training-log reference, but it is not on the same cost definition as the paper-env evaluation curves
+- `base_task_nominal_train_curve.csv` is still useful as a raw training-log reference, and it now matches the same cost definition as the evaluation curves
 
 The benchmark-style plot uses cumulative environment steps on the x-axis:
 
@@ -722,11 +721,9 @@ The plot also draws vertical stage boundaries at:
 
 This makes the sample cost of the full three-stage method explicit instead of only counting switch-stage updates.
 
-The cost subplot also draws the paper-style continuous cost limit for the robot:
+The cost subplot also draws the usual OmniSafe safe-RL episode-cost budget:
 
-- Ant: `103.115`
-- HalfCheetah: `151.989`
-- Humanoid: `20.140`
+- all three robots: `25`
 
 Curve-resolution note:
 
@@ -736,10 +733,10 @@ Curve-resolution note:
 Important comparability note:
 
 - the switch env's own `Metrics/EpRet` is a custom gate reward, not the original locomotion reward
-- the switch env's own `Metrics/EpCost` is now on the paper continuous-cost signal
+- the switch env's own `Metrics/EpCost` is now on the same standard binary-cost signal used by the default velocity tasks
 - but the switch env's own `Metrics/EpRet` is still not the original locomotion reward
-- therefore the benchmark-style comparison must still use the separate paper-env evaluation path for the reward/cost figure
-- the switch stage `progress.csv` cost is now on the paper continuous-cost scale, so it is more interpretable against the paper cost limits than older switch runs were
+- therefore the benchmark-style comparison still uses the separate base-task evaluation path for the reward/cost figure
+- the switch stage `progress.csv` cost is now directly comparable to the default OmniSafe velocity-task cost scale and the standard `25` cost budget
 
 ## TODOs Left in the Code
 
